@@ -94,14 +94,16 @@ function _M.get_type(self)
 end
 
 
-function _M.set_type(self, typ)
+local function set_type(self, typ)
     self._type = typ
 end
+_M.set_type = set_type
 
 
-function _M.set_phase(self, phase)
+local function set_phase(self, phase)
     self._phase = phase
 end
+_M.set_phase = set_phase
 
 
 function _M.get_phase(self)
@@ -124,15 +126,20 @@ function _M.next_handler(self, module)
 end
 
 
+-- content -> header filter -> content
 function _M.run(self, phase)
-    self:set_phase(phase)
+    local old_phase = self._phase
+    set_phase(self, phase)
     run_phase(self)
+    set_phase(self, old_phase)
 end
 
 
 function _M.exec(self, typ)
-    self:set_type(typ)
+    local old_phase = self._phase
+    set_type(self, typ)
     run_phase(self)
+    set_phase(self, old_phase)
 end
 
 
