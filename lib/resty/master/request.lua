@@ -6,12 +6,16 @@ local core = require "resty.master.core"
 
 
 local type = type
+local ipairs = ipairs
+local assert = assert
 local setmetatable = setmetatable
 
 
 local _M = {}
 local _mt = { __index = _M }
 local _handlers = {}
+local _inits = {}  -- init worker hooks
+local _inits_loaded = {}
 
 
 _M.REWRITE_PHASE       = core.REWRITE_PHASE
@@ -26,15 +30,22 @@ local function is_tbl(obj) return type(obj) == "table" end
 
 
 local function load_module_phase(module, phase)
+    local phase_ctx
     if is_tbl(module) then
-        local export = module[2]
-        if is_tbl(export) and export[phase] == true then
-            module = module[1]
-        else
+        local export = module.export
+        if is_tbl(export) and not export[phase] then
             return
         end
+
+        local ctx = module.ctx
+        if is_tbl(ctx) then
+            phase_ctx = ctx[phase]
+        end
+
+        module = module[1]
     end
-    return module, require(module)[phase]
+    local mod = assert(require(module), module)
+    return module, mod[phase], phase_ctx or {}
 end
 
 
@@ -42,9 +53,9 @@ local function phase_handler(modules, phase)
     local chain
     local index = {}
     for idx = #modules, 1, -1 do
-        local module, ph = load_module_phase(modules[idx], phase)
+        local module, ph, ctx = load_module_phase(modules[idx], phase)
         if ph then
-            chain = { next = chain, handler = ph.handler }
+            chain = { next = chain, handler = ph.handler, ctx = ctx }
             index[module] = chain
         end
     end
@@ -60,7 +71,7 @@ local function next_handler(self, phase, module)
 
     local chain = ph.index[module].next
     if chain then
-        return chain.handler(self)
+        return chain.handler(self, chain.ctx)
     end
 end
 
@@ -69,13 +80,13 @@ local function run_phase(self)
     local ph = _handlers[self._type][self._phase]
     local chain = ph.chain
     if chain then
-        chain.handler(self)
+        chain.handler(self, chain.ctx)
     end
 end
 
 
 function _M.new(typ)
-    local r = { _ctx = {}, _type = typ, _phase = -1 }
+    local r = { _ctx = {}, _type = typ, _phase = 0 }
     return setmetatable(r, _mt)
 end
 
@@ -86,6 +97,34 @@ function _M.register(typ, modules)
         handler[phase] = phase_handler(modules, phase)
     end
     _handlers[typ] = handler
+
+    for _, mod in ipairs(modules) do
+        local module, init, ctx = load_module_phase(mod, core.INIT_WORKER)
+        if init and init.handler then
+            if not ctx then
+                if _inits_loaded[module] then
+                    ngx.log(ngx.ERR, module,
+                            " init multiple times without context")
+                else
+                    _inits_loaded[module] = true
+                end
+            end
+
+            _inits[#_inits + 1] = { init.handler, ctx }
+        end
+    end
+end
+
+
+function _M.init()
+    local handler, ctx
+    for _, init in ipairs(_inits) do
+        handler, ctx = init[1], init[2]
+        handler(ctx)
+    end
+
+    _inits = {}
+    _inits_loaded = {}
 end
 
 

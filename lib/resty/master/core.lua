@@ -5,6 +5,8 @@
 local _M = {}
 
 
+_M.INIT_WORKER         = -1
+
 _M.REWRITE_PHASE       = 1
 _M.ACCESS_PHASE        = 2
 _M.CONTENT_PHASE       = 3
