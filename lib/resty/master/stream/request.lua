@@ -35,7 +35,7 @@ local function load_module_phase(module, phase)
 
         local ctx = module.ctx
         if is_tbl(ctx) then
-            phase_ctx = ctx[phase]
+            phase_ctx = ctx[phase] or ctx
         end
 
         module = module[1]
