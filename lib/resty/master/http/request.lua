@@ -2,7 +2,7 @@
 -- Copyright (C) Jinzheng Zhang (tianchaijz)
 
 
-local core = require "resty.master.core"
+local core = require "resty.master.http.core"
 
 
 local type = type
